@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0b1020">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>제주 안전 코스 지도</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+    }
+
+    #map {
+      height: 100%;
+      width: 100%;
+    }
+
+    /* 코스 선택창 */
+    #course-box {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: white;
+      padding: 10px;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      display: flex;
+      gap: 10px;
+      z-index: 1000;
+    }
+
+    .course-btn {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      color: white;
+    }
+    .a { background: #007bff; }
+    .b { background: #28a745; }
+    .c { background: #ff9800; }
+    .d { background: #e53935; }
+
+    /* 장소 정보창 */
+    #info-box {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: white;
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      z-index: 1000;
+      width: 80%;
+      max-width: 400px;
+      text-align: center;
+    }
+
+    /* 화살표 버튼 */
+    #prev, #next {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 28px;
+      font-weight: bold;
+      background: white;
+      border: 2px solid #888;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      z-index: 1001;
+    }
+
+    #prev { left: 10px; }
+    #next { right: 10px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="course-box">
+    <button class="course-btn a" onclick="startCourse('a')">A코스</button>
+    <button class="course-btn b" onclick="startCourse('b')">B코스</button>
+    <button class="course-btn c" onclick="startCourse('c')">C코스</button>
+    <button class="course-btn d" onclick="startCourse('d')">D코스</button>
+  </div>
+
+  <div id="info-box">코스를 선택해주세요</div>
+  <div id="prev" onclick="prevPlace()">◀</div>
+  <div id="next" onclick="nextPlace()">▶</div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    // 지도 초기 설정
+    const map = L.map('map').setView([33.4996, 126.5312], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    // 장소 목록
+    const places = {
+      "제주국제공항": { lat: 33.5104, lng: 126.4913, info: "기내에는  라이터 등의 가연성 물질을 반입할 수 없고, 보조 배터리는 기내 반입만이 가능합니다. 이륙 전에 전자기기는 비행기 모드로 변경해야 하며 탑승 후 승무원의 안내를 잘 숙지해야 합니다." },
+      "스누피가든": { lat: 33.4785, lng: 126.7156, info: "전시품을 훼손하지 않도록 주의하고, 벌에 쏘일 수 있으므로 밝은색 옷을 입고 가는 것이 좋습니다." },
+      "함덕해변": { lat: 33.5437, lng: 126.6703, info: "돌이나 조개껍질 등에 주의해 맨발로는 들어가지 않는 것이 좋습니다." },
+      "우도": { lat: 33.5059, lng: 126.9553, info: "멀미가 심한 경우 배에 탑승하기 전 멀미약을 복용하는 것이 좋습니다. 우도는 섬 대부분을 자전거를 타고 이동하기 때문에 헬멧 등의 보호장구를 꼭 착용해야 하며 자전거 작동 방법을 숙지하고 교통안전에 유의하며 운전해야 합니다." },
+      "주상절리": { lat: 33.2449, lng: 126.4148, info: "주상절리 주변의 절벽은 바위의 경사가 급하고 미끄러우므로 펜스 안쪽에서만 관람하는 것이 좋습니다. 또한 무리하게 사진을 찍으려다가 파도에 휩쓸려간 사례도 있으므로 파도가 강할 때에는 주의하시기 바랍니다." },
+      "협재해수욕장": { lat: 33.3939, lng: 126.2390, info: "물이 차가울 수 있으니 무리한 입수는 자제하고, 해파리를 밟지 않도록 조심하는 것이 좋습니다. 또한 바다 주변의 바위는 미끄러우므로 넘어지지 않도록 주의해야 합니다." },
+      "카멜리아힐": { lat: 33.2917, lng: 126.3704, info: "수목원 내의 식물들을 해치지 않도록 하고, 벌에 쏘이지 않도록 밝은색 옷을 입고 가는 것이 좋습니다." },
+      "제트보트": { lat: 33.2492, lng: 126.4148, info: "안전사고 방지를 위해 반드시 구명조끼를 착용해야 하며, 제대로 착용했는지 탑승 전에 꼭 점검해야 합니다. 생각보다 충격이 크므로 관절이 좋지 않으면 탑승을 자제하고, 멀미가 심한 경우에는 멀미약을 복용하는 것이 좋습니다." },
+      "새별오름": { lat: 33.3547, lng: 126.3615, info: "우천 시 미끄러지지 않도록 주의해야 하고, 경로를 이탈하지 않도록 합니다." },
+      "동문시장": { lat: 33.5115, lng: 126.5262, info: "시장에 사람이 많으므로 단체로 다니는 경우 흩어지지 않도록 주의하고, 사람들에 걸려 넘어지지 않도록 조심하세요." },
+      "올레시장": { lat: 33.2500, lng: 126.5500, info: "시장에 사람이 많으므로 단체로 다니는 경우 흩어지지 않도록 주의하고, 사람들에 걸려 넘어지지 않도록 조심하세요." }
+    };
+
+    // 코스 정의 (모두 제주공항으로 시작)
+    const courses = {
+      a: ["제주국제공항", "스누피가든", "함덕해변","동문시장"],
+      b: ["제주국제공항", "우도", "스누피가든"],
+      c: ["제주국제공항", "주상절리", "제트보트", "올레시장", "카멜리아힐"],
+      d: ["제주국제공항", "새별오름", "협재해수욕장"]
+    };
+
+    // 현재 코스 및 인덱스
+    let currentCourse = null;
+    let currentIndex = 0;
+
+    // 장소 마커 추가
+    for (const [name, data] of Object.entries(places)) {
+      L.marker([data.lat, data.lng]).addTo(map).bindPopup(name);
+    }
+
+    const infoBox = document.getElementById('info-box');
+    const prevBtn = document.getElementById('prev');
+    const nextBtn = document.getElementById('next');
+
+    // 코스 시작
+    function startCourse(courseKey) {
+      currentCourse = courseKey;
+      currentIndex = 0;
+      focusPlace();
+    }
+
+    // 장소 포커싱 + 정보 표시
+    function focusPlace() {
+      if (!currentCourse) return;
+      const placeName = courses[currentCourse][currentIndex];
+      const data = places[placeName];
+      map.setView([data.lat, data.lng], 14);
+      infoBox.innerHTML = `<h3>${placeName}</h3><p>${data.info}</p>`;
+      updateArrows();
+    }
+
+    // 화살표 표시/숨김 업데이트
+    function updateArrows() {
+      if (!currentCourse) return;
+      prevBtn.style.display = currentIndex === 0 ? 'none' : 'flex';
+      nextBtn.style.display = currentIndex === courses[currentCourse].length - 1 ? 'none' : 'flex';
+    }
+
+    // 이전 장소
+    function prevPlace() {
+      if (!currentCourse || currentIndex === 0) return;
+      currentIndex--;
+      focusPlace();
+    }
+
+    // 다음 장소
+    function nextPlace() {
+      if (!currentCourse || currentIndex === courses[currentCourse].length - 1) return;
+      currentIndex++;
+      focusPlace();
+    }
+
+    // 초기 상태
+    updateArrows();
+  </script>
+</body>
+</html>
